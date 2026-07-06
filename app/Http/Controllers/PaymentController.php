@@ -3,147 +3,195 @@
 namespace App\Http\Controllers;
 
 use App\Models\Payment;
-use App\Models\Student;
-use App\Models\Spp;
+use App\Models\PaymentMethod;
 use Illuminate\Http\Request;
-use Illuminate\View\View;
-use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 
 class PaymentController extends Controller
 {
-    /**
-     * Display a listing of payments
-     */
-    public function index(Request $request): View
+    public function __construct()
     {
-        $query = Payment::with('student', 'spp');
+        $this->middleware('auth');
+    }
 
-        // Filter by status
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
+    /**
+     * Display list of payments
+     */
+    public function index()
+    {
+        $user = Auth::user();
+        
+        if ($user->isAdmin() || $user->isOfficer()) {
+            $payments = Payment::with('user', 'paymentMethod')
+                ->latest()
+                ->paginate(15);
+        } else {
+            $payments = Payment::where('user_id', $user->id)
+                ->with('paymentMethod')
+                ->latest()
+                ->paginate(15);
         }
-
-        // Filter by date range
-        if ($request->filled('from_date')) {
-            $query->whereDate('created_at', '>=', $request->from_date);
-        }
-        if ($request->filled('to_date')) {
-            $query->whereDate('created_at', '<=', $request->to_date);
-        }
-
-        // Search by student name or NISN
-        if ($request->filled('search')) {
-            $search = $request->search;
-            $query->whereHas('student', function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('nisn', 'like', "%{$search}%");
-            });
-        }
-
-        $payments = $query->orderByDesc('created_at')->paginate(20);
 
         return view('payments.index', compact('payments'));
     }
 
     /**
-     * Show the form for creating a new payment
+     * Show create form
      */
-    public function create(): View
+    public function create()
     {
-        $students = Student::with('class')->get();
-        $sppList = Spp::where('is_active', true)->get();
+        if (!Auth::user()->isStudent()) {
+            abort(403, 'Hanya siswa yang bisa membuat pembayaran');
+        }
 
-        return view('payments.create', compact('students', 'sppList'));
+        $paymentMethods = PaymentMethod::active()->get();
+        return view('payments.create', compact('paymentMethods'));
     }
 
     /**
-     * Store a newly created payment
+     * Store payment
      */
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request)
     {
         $validated = $request->validate([
-            'student_id' => 'required|exists:students,id',
-            'spp_id' => 'required|exists:spp,id',
-            'amount' => 'required|numeric|min:0.01',
-            'payment_method' => 'required|string|in:cash,bank_transfer,check',
-            'reference_number' => 'nullable|string|max:50',
-            'notes' => 'nullable|string',
+            'amount' => 'required|numeric|min:1000',
+            'payment_method_id' => 'required|exists:payment_methods,id',
+            'description' => 'nullable|string|max:500',
+            'proof_file' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
         ]);
+
+        $proofFile = null;
+        if ($request->hasFile('proof_file')) {
+            $proofFile = $request->file('proof_file')->store('payment-proofs', 'public');
+        }
 
         $payment = Payment::create([
-            ...$validated,
-            'status' => 'paid',
+            'user_id' => Auth::id(),
+            'payment_method_id' => $validated['payment_method_id'],
+            'reference_number' => Payment::generateReferenceNumber(),
+            'amount' => $validated['amount'],
+            'description' => $validated['description'],
+            'proof_file' => $proofFile,
             'payment_date' => now(),
-            'processed_by' => auth()->id(),
+            'status' => 'pending',
         ]);
 
-        // Log in history
-        $payment->history()->create([
-            'action' => 'confirmed',
-            'user_id' => auth()->id(),
-            'old_status' => null,
-            'new_status' => 'paid',
-            'description' => 'Pembayaran baru dibuat',
-        ]);
-
-        return redirect()->route('payments.show', $payment)
-                        ->with('success', 'Pembayaran berhasil dicatat');
+        return redirect()->route('payments.show', $payment)->with('success', 'Pembayaran berhasil diajukan!');
     }
 
     /**
-     * Display the specified payment
+     * Show payment detail
      */
-    public function show(Payment $payment): View
+    public function show(Payment $payment)
     {
-        $payment->load('student', 'spp', 'history.user', 'processedBy');
+        if (Auth::user()->isStudent() && Auth::id() !== $payment->user_id) {
+            abort(403, 'Anda tidak memiliki akses ke pembayaran ini');
+        }
 
+        $payment->load('user', 'paymentMethod', 'verifications');
         return view('payments.show', compact('payment'));
     }
 
     /**
-     * Show the form for editing the specified payment
+     * Show edit form
      */
-    public function edit(Payment $payment): View
+    public function edit(Payment $payment)
     {
-        return view('payments.edit', compact('payment'));
+        if (!$payment->isPending()) {
+            abort(403, 'Hanya pembayaran yang pending yang bisa diedit');
+        }
+
+        if (Auth::user()->isStudent() && Auth::id() !== $payment->user_id) {
+            abort(403, 'Anda tidak memiliki akses');
+        }
+
+        $paymentMethods = PaymentMethod::active()->get();
+        return view('payments.edit', compact('payment', 'paymentMethods'));
     }
 
     /**
-     * Update the specified payment
+     * Update payment
      */
-    public function update(Request $request, Payment $payment): RedirectResponse
+    public function update(Request $request, Payment $payment)
     {
+        if (!$payment->isPending()) {
+            abort(403, 'Hanya pembayaran yang pending yang bisa diupdate');
+        }
+
         $validated = $request->validate([
-            'payment_method' => 'required|string|in:cash,bank_transfer,check',
-            'reference_number' => 'nullable|string|max:50',
-            'notes' => 'nullable|string',
+            'amount' => 'required|numeric|min:1000',
+            'payment_method_id' => 'required|exists:payment_methods,id',
+            'description' => 'nullable|string|max:500',
+            'proof_file' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
         ]);
+
+        if ($request->hasFile('proof_file')) {
+            if ($payment->proof_file) {
+                Storage::disk('public')->delete($payment->proof_file);
+            }
+            $validated['proof_file'] = $request->file('proof_file')->store('payment-proofs', 'public');
+        }
 
         $payment->update($validated);
 
-        return redirect()->route('payments.show', $payment)
-                        ->with('success', 'Pembayaran berhasil diperbarui');
+        return redirect()->route('payments.show', $payment)->with('success', 'Pembayaran berhasil diupdate!');
     }
 
     /**
-     * Cancel a payment
+     * Verify payment (Admin/Officer only)
      */
-    public function cancel(Payment $payment): RedirectResponse
+    public function verify(Request $request, Payment $payment)
     {
-        if ($payment->status === 'paid') {
-            $oldStatus = $payment->status;
-            $payment->update(['status' => 'pending']);
+        if (!Auth::user()->isOfficer() && !Auth::user()->isAdmin()) {
+            abort(403, 'Anda tidak memiliki akses untuk verifikasi');
+        }
 
-            $payment->history()->create([
-                'action' => 'cancelled',
-                'user_id' => auth()->id(),
-                'old_status' => $oldStatus,
-                'new_status' => 'pending',
-                'description' => 'Pembayaran dibatalkan',
+        $validated = $request->validate([
+            'action' => 'required|in:verified,rejected',
+            'notes' => 'nullable|string|max:500',
+        ]);
+
+        if ($validated['action'] === 'verified') {
+            $payment->update([
+                'status' => 'verified',
+                'verified_by' => Auth::id(),
+                'verified_date' => now(),
+            ]);
+        } else {
+            $payment->update([
+                'status' => 'rejected',
+                'verified_by' => Auth::id(),
+                'verified_date' => now(),
+                'rejection_reason' => $validated['notes'],
             ]);
         }
 
-        return redirect()->route('payments.show', $payment)
-                        ->with('success', 'Pembayaran berhasil dibatalkan');
+        $payment->verifications()->create([
+            'verified_by' => Auth::id(),
+            'action' => $validated['action'],
+            'notes' => $validated['notes'],
+            'verification_method' => 'manual',
+        ]);
+
+        return redirect()->back()->with('success', 'Pembayaran berhasil ' . ($validated['action'] === 'verified' ? 'diverifikasi' : 'ditolak') . '!');
+    }
+
+    /**
+     * Delete payment
+     */
+    public function destroy(Payment $payment)
+    {
+        if (!$payment->isPending()) {
+            abort(403, 'Hanya pembayaran yang pending yang bisa dihapus');
+        }
+
+        if ($payment->proof_file) {
+            Storage::disk('public')->delete($payment->proof_file);
+        }
+
+        $payment->delete();
+
+        return redirect()->route('payments.index')->with('success', 'Pembayaran berhasil dihapus!');
     }
 }

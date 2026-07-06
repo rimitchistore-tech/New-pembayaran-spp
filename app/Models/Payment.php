@@ -2,95 +2,112 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Payment extends Model
 {
-    use SoftDeletes;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
-        'student_id',
-        'spp_id',
+        'user_id',
+        'payment_method_id',
+        'reference_number',
         'amount',
         'status',
+        'description',
+        'proof_file',
         'payment_date',
-        'payment_method',
-        'reference_number',
-        'notes',
-        'processed_by',
+        'verified_by',
+        'verified_date',
+        'rejection_reason',
     ];
 
     protected $casts = [
+        'payment_date' => 'datetime',
+        'verified_date' => 'datetime',
         'amount' => 'decimal:2',
-        'payment_date' => 'date',
     ];
 
     /**
-     * Relationship: Payment belongs to Student
+     * Relationships
      */
-    public function student(): BelongsTo
+    public function user()
     {
-        return $this->belongsTo(Student::class);
+        return $this->belongsTo(User::class);
+    }
+
+    public function paymentMethod()
+    {
+        return $this->belongsTo(PaymentMethod::class);
+    }
+
+    public function verifications()
+    {
+        return $this->hasMany(PaymentVerification::class);
+    }
+
+    public function verifiedBy()
+    {
+        return $this->belongsTo(User::class, 'verified_by');
     }
 
     /**
-     * Relationship: Payment belongs to SPP
+     * Scopes
      */
-    public function spp(): BelongsTo
+    public function scopePending($query)
     {
-        return $this->belongsTo(Spp::class);
+        return $query->where('status', 'pending');
+    }
+
+    public function scopeVerified($query)
+    {
+        return $query->where('status', 'verified');
+    }
+
+    public function scopePaid($query)
+    {
+        return $query->where('status', 'paid');
+    }
+
+    public function scopeRejected($query)
+    {
+        return $query->where('status', 'rejected');
     }
 
     /**
-     * Relationship: Payment processed by User (Officer)
+     * Methods
      */
-    public function processedBy(): BelongsTo
+    public function isPending()
     {
-        return $this->belongsTo(User::class, 'processed_by');
+        return $this->status === 'pending';
+    }
+
+    public function isVerified()
+    {
+        return $this->status === 'verified';
+    }
+
+    public function isPaid()
+    {
+        return $this->status === 'paid';
+    }
+
+    public function isRejected()
+    {
+        return $this->status === 'rejected';
     }
 
     /**
-     * Relationship: Payment has many History records
+     * Generate reference number
      */
-    public function history(): HasMany
+    public static function generateReferenceNumber()
     {
-        return $this->hasMany(PaymentHistory::class);
-    }
-
-    /**
-     * Check if payment is overdue (pending more than 30 days)
-     */
-    public function isOverdue(): bool
-    {
-        if ($this->status !== 'pending') {
-            return false;
-        }
-        return $this->created_at->addDays(30)->isPast();
-    }
-
-    /**
-     * Mark payment as paid
-     */
-    public function markAsPaid(string $method = 'cash', string $referenceNumber = null, int $userId = null): void
-    {
-        $this->update([
-            'status' => 'paid',
-            'payment_date' => now(),
-            'payment_method' => $method,
-            'reference_number' => $referenceNumber,
-            'processed_by' => $userId,
-        ]);
-
-        // Log history
-        $this->history()->create([
-            'action' => 'confirmed',
-            'user_id' => $userId,
-            'old_status' => 'pending',
-            'new_status' => 'paid',
-            'description' => "Pembayaran dikonfirmasi via $method",
-        ]);
+        $date = now()->format('Ym');
+        $count = static::whereYear('created_at', now()->year)
+                       ->whereMonth('created_at', now()->month)
+                       ->count() + 1;
+        return 'INV-' . $date . '-' . str_pad($count, 5, '0', STR_PAD_LEFT);
     }
 }
