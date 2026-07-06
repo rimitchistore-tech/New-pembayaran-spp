@@ -1,200 +1,178 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>@yield('title', 'SPP Payment System')</title>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>{{ config('app.name', 'SPP Payment System') }} - @yield('title', 'Home')</title>
+
+    <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- Custom CSS -->
     <style>
         :root {
-            --primary: #4e73df;
-            --secondary: #858796;
-            --success: #1cc88a;
-            --info: #36b9cc;
-            --warning: #f6c23e;
-            --danger: #e74a3b;
+            --primary-color: #4f46e5;
+            --secondary-color: #6b7280;
+            --success-color: #10b981;
+            --danger-color: #ef4444;
+            --warning-color: #f59e0b;
         }
-        
+
         body {
-            background-color: #f8f9fc;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f9fafb;
+            color: #1f2937;
         }
-        
-        .sidebar {
-            min-height: 100vh;
-            background: linear-gradient(180deg, var(--primary) 10%, #224abe 100%);
-            color: white;
-            padding: 0;
+
+        .navbar {
+            background-color: #ffffff;
+            border-bottom: 1px solid #e5e7eb;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
-        
-        .sidebar .nav-link {
-            color: rgba(255, 255, 255, 0.8);
-            padding: 1rem 1.5rem;
-            border-left: 4px solid transparent;
-            transition: all 0.3s ease;
+
+        .navbar-brand {
+            color: var(--primary-color) !important;
+            font-weight: 700;
+            font-size: 1.5rem;
         }
-        
-        .sidebar .nav-link:hover,
-        .sidebar .nav-link.active {
-            color: white;
-            background-color: rgba(255, 255, 255, 0.1);
-            border-left-color: white;
+
+        .navbar-nav .nav-link {
+            color: #6b7280 !important;
+            margin-left: 1rem;
+            transition: color 0.3s ease;
         }
-        
-        .main-content {
-            flex: 1;
-            padding: 2rem;
+
+        .navbar-nav .nav-link:hover {
+            color: var(--primary-color) !important;
         }
-        
-        .navbar-custom {
-            background: white;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            padding: 1rem 2rem;
-            border-bottom: 1px solid #e3e6f0;
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
         }
-        
+
+        .btn-primary:hover {
+            background-color: #4338ca;
+            border-color: #4338ca;
+        }
+
         .card {
             border: none;
-            box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
-            margin-bottom: 1.5rem;
+            border-radius: 0.75rem;
         }
-        
+
         .card-header {
-            background-color: var(--primary);
-            color: white;
-            border-bottom: 1px solid #e3e6f0;
+            background-color: #f3f4f6;
+            border-bottom: 1px solid #e5e7eb;
+            font-weight: 600;
         }
-        
-        .stat-card {
-            border-left: 4px solid var(--primary);
+
+        .form-label {
+            font-weight: 500;
+            color: #374151;
+            margin-bottom: 0.5rem;
         }
-        
-        .stat-card.success {
-            border-left-color: var(--success);
+
+        .form-control, .form-select {
+            border: 1px solid #d1d5db;
+            border-radius: 0.5rem;
+            padding: 0.75rem 1rem;
         }
-        
-        .stat-card.warning {
-            border-left-color: var(--warning);
+
+        .form-control:focus, .form-select:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 0.2rem rgba(79, 70, 229, 0.25);
         }
-        
-        .stat-card.danger {
-            border-left-color: var(--danger);
+
+        .alert {
+            border: none;
+            border-radius: 0.5rem;
         }
-        
-        .btn-primary {
-            background-color: var(--primary);
-            border-color: var(--primary);
+
+        .sidebar {
+            background-color: #1f2937;
+            color: #f3f4f6;
+            min-height: 100vh;
         }
-        
-        .btn-primary:hover {
-            background-color: #224abe;
-            border-color: #224abe;
+
+        .sidebar .nav-link {
+            color: #d1d5db !important;
+            padding: 0.75rem 1rem;
+            border-left: 3px solid transparent;
+            transition: all 0.3s ease;
         }
-        
-        .table-responsive {
-            border-radius: 0.35rem;
+
+        .sidebar .nav-link:hover {
+            background-color: #374151;
+            border-left-color: var(--primary-color);
+            color: #ffffff !important;
         }
-        
-        .badge {
-            padding: 0.5rem 0.75rem;
-            font-size: 0.875rem;
+
+        .sidebar .nav-link.active {
+            background-color: #374151;
+            border-left-color: var(--primary-color);
+            color: var(--primary-color) !important;
         }
     </style>
-    @yield('css')
+    @yield('styles')
 </head>
 <body>
-    <div class="d-flex">
-        <!-- Sidebar -->
-        <div class="sidebar" style="width: 250px;">
-            <div class="p-3 border-bottom border-light">
-                <h5 class="mb-0"><i class="bi bi-cash-coin"></i> SPP System</h5>
-                <small>Payment Management</small>
-            </div>
-            <nav class="nav flex-column">
-                <a class="nav-link {{ request()->routeIs('dashboard') ? 'active' : '' }}" href="{{ route('dashboard') }}">
-                    <i class="bi bi-house-door me-2"></i> Dashboard
-                </a>
-                <a class="nav-link {{ request()->routeIs('students.*') ? 'active' : '' }}" href="{{ route('students.index') }}">
-                    <i class="bi bi-people me-2"></i> Siswa
-                </a>
-                <a class="nav-link {{ request()->routeIs('classes.*') ? 'active' : '' }}" href="{{ route('classes.index') }}">
-                    <i class="bi bi-building me-2"></i> Kelas
-                </a>
-                <a class="nav-link {{ request()->routeIs('payments.*') ? 'active' : '' }}" href="{{ route('payments.index') }}">
-                    <i class="bi bi-receipt me-2"></i> Pembayaran
-                </a>
-                <a class="nav-link {{ request()->routeIs('spp.*') ? 'active' : '' }}" href="{{ route('spp.index') }}">
-                    <i class="bi bi-file-earmark-text me-2"></i> SPP
-                </a>
-            </nav>
-            <div class="p-3 border-top border-light mt-auto" style="position: absolute; bottom: 0; width: 100%;">
-                <form method="POST" action="{{ route('logout') }}">
-                    @csrf
-                    <button type="submit" class="btn btn-outline-light w-100">
-                        <i class="bi bi-box-arrow-right me-2"></i> Logout
-                    </button>
-                </form>
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-light">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{{ url('/') }}">
+                <i class="fas fa-graduation-cap"></i> SPP System
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    @guest
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ route('login') }}">Login</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ route('register') }}">Register</a>
+                        </li>
+                    @endguest
+                    @auth
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown">
+                                <i class="fas fa-user-circle"></i> {{ Auth::user()->name }}
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><a class="dropdown-item" href="{{ route('profile.show') }}">Profile</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <form method="POST" action="{{ route('logout') }}" class="d-inline">
+                                        @csrf
+                                        <button type="submit" class="dropdown-item">Logout</button>
+                                    </form>
+                                </li>
+                            </ul>
+                        </li>
+                    @endauth
+                </ul>
             </div>
         </div>
+    </nav>
 
-        <!-- Main Content -->
-        <div class="main-content w-100">
-            <!-- Top Navbar -->
-            <div class="navbar-custom mb-4">
-                <div class="d-flex justify-content-between align-items-center">
-                    <h6 class="mb-0">@yield('page-title', 'Dashboard')</h6>
-                    <div class="dropdown">
-                        <button class="btn btn-sm btn-link dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                            <i class="bi bi-person-circle"></i> {{ Auth::user()->name }}
-                        </button>
-                        <ul class="dropdown-menu dropdown-menu-end">
-                            <li><a class="dropdown-item" href="#">Profile</a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li>
-                                <form method="POST" action="{{ route('logout') }}" class="d-inline">
-                                    @csrf
-                                    <button type="submit" class="dropdown-item">Logout</button>
-                                </form>
-                            </li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
+    <!-- Main Content -->
+    <main>
+        @yield('content')
+    </main>
 
-            <!-- Alert Messages -->
-            @if ($errors->any())
-                <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                    <h6 class="mb-2"><i class="bi bi-exclamation-circle"></i> Ada kesalahan!</h6>
-                    <ul class="mb-0">
-                        @foreach ($errors->all() as $error)
-                            <li>{{ $error }}</li>
-                        @endforeach
-                    </ul>
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
-            @endif
-
-            @if (session('success'))
-                <div class="alert alert-success alert-dismissible fade show" role="alert">
-                    <i class="bi bi-check-circle"></i> {{ session('success') }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
-            @endif
-
-            @if (session('error'))
-                <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                    <i class="bi bi-exclamation-circle"></i> {{ session('error') }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
-            @endif
-
-            <!-- Page Content -->
-            @yield('content')
+    <!-- Footer -->
+    <footer class="bg-dark text-light py-4 mt-5">
+        <div class="container text-center">
+            <p class="mb-0">&copy; {{ date('Y') }} SPP Payment System. All rights reserved.</p>
         </div>
-    </div>
+    </footer>
 
+    <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    @yield('js')
+    @yield('scripts')
 </body>
 </html>
